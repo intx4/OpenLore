@@ -1076,6 +1076,38 @@ describe('LLMService', () => {
     });
   });
 
+  describe('AnthropicProvider sampling parameters', () => {
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    async function sentTemperature(model: string, temperature?: number): Promise<unknown> {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({
+        content: [], usage: { input_tokens: 0, output_tokens: 0 }, model, stop_reason: 'end_turn',
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      await new AnthropicProvider('key', model).generateCompletion({ systemPrompt: '', userPrompt: '', temperature });
+      return JSON.parse((fetchMock.mock.calls.at(-1)?.[1] as RequestInit).body as string).temperature;
+    }
+
+    it.each([
+      'claude-opus-4-7',
+      'claude-sonnet-5',
+      'claude-haiku-5-5',
+      'claude-fable-5-1',
+      'eu.anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-opus-5-5',
+    ])('omits temperature for %s, which rejects it', async (model) => {
+      expect(await sentTemperature(model, 0.1)).toBeUndefined();
+    });
+
+    it.each([
+      ['claude-opus-4-6', 0.1, 0.1],
+      ['claude-haiku-4-5', undefined, 0.3],
+      ['eu.anthropic.claude-sonnet-4-5', 0.1, 0.1],
+    ])('sends temperature to %s', async (model, requested, sent) => {
+      expect(await sentTemperature(model, requested)).toBe(sent);
+    });
+  });
+
   describe('Provider response robustness (malformed / usage-less responses)', () => {
     afterEach(() => { vi.restoreAllMocks(); });
 

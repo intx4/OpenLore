@@ -829,6 +829,12 @@ function tokenCount(v: unknown): number {
 // ============================================================================
 
 /**
+ * Claude Opus 4.7 and every later model reject `temperature` with a 400. Matches both
+ * Claude API ids (`claude-haiku-5-5`) and platform ids (e.g. `us.anthropic.claude-haiku-5-5` on Amazon Bedrock).
+ */
+const CLAUDE_NO_TEMPERATURE_REGEX = /claude-(?:opus-4-[7-9]|(?:opus|sonnet|haiku|fable|mythos)-[5-9])/;
+
+/**
  * Anthropic Claude provider
  */
 export class AnthropicProvider implements LLMProvider {
@@ -864,7 +870,7 @@ export class AnthropicProvider implements LLMProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: request.maxTokens ?? this.maxOutputTokens,
-        temperature: request.temperature ?? 0.3,
+        temperature: CLAUDE_NO_TEMPERATURE_REGEX.test(this.model) ? undefined : request.temperature ?? 0.3,
         system: request.systemPrompt,
         messages: [
           { role: 'user', content: request.userPrompt },
