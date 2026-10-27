@@ -6,10 +6,11 @@
  */
 
 import {
+  ANTHROPIC_MAX_OUTPUT_TOKENS,
   DECISIONS_CONSOLIDATION_MAX_TOKENS,
 } from '../../constants.js';
 import { logger } from '../../utils/logger.js';
-import type { LLMService } from '../services/llm-service.js';
+import { isClaude47PlusModel, type LLMService } from '../services/llm-service.js';
 import type { PendingDecision, DecisionStore, SpecMap, DecisionScope } from '../../types/index.js';
 import { makeDecisionId } from './store.js';
 import {
@@ -176,18 +177,23 @@ export async function consolidateDrafts(
     2,
   );
 
+  // Claude 4.7+ runs uncapped: no explicit max_tokens, so the provider's own output
+  // ceiling applies instead of the 2k consolidation cap.
+  const uncapped = isClaude47PlusModel(llm.getModel());
+  const outputCap = uncapped ? ANTHROPIC_MAX_OUTPUT_TOKENS : DECISIONS_CONSOLIDATION_MAX_TOKENS;
+
   const boundary = createPromptBoundary();
   const response = await llm.complete({
     systemPrompt: `${SYSTEM_PROMPT}\n\n${boundary.instruction}`,
     userPrompt: boundary.wrap(userContent),
-    maxTokens: DECISIONS_CONSOLIDATION_MAX_TOKENS,
+    maxTokens: uncapped ? undefined : DECISIONS_CONSOLIDATION_MAX_TOKENS,
     temperature: 0.1,
   });
   const raw = response.content;
 
   if (response.finishReason === 'length') {
     throw new Error(
-      `decision consolidation response truncated at ${DECISIONS_CONSOLIDATION_MAX_TOKENS.toLocaleString('en-US')} tokens — ` +
+      `decision consolidation response truncated at ${outputCap.toLocaleString('en-US')} tokens — ` +
       'decisions may be lost; raise the cap or reduce scope',
     );
   }
@@ -197,9 +203,9 @@ export async function consolidateDrafts(
 
   const parsed = parseJSON<unknown>(raw, null);
   if (!Array.isArray(parsed)) {
-    if (response.usage?.outputTokens >= DECISIONS_CONSOLIDATION_MAX_TOKENS) {
+    if (response.usage?.outputTokens >= outputCap) {
       throw new Error(
-        `decision consolidation response truncated at ${DECISIONS_CONSOLIDATION_MAX_TOKENS.toLocaleString('en-US')} tokens — ` +
+        `decision consolidation response truncated at ${outputCap.toLocaleString('en-US')} tokens — ` +
         'decisions may be lost; raise the cap or reduce scope',
       );
     }

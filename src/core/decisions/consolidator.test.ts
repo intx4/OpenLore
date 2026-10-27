@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { consolidateDrafts } from './consolidator.js';
 import { applyConsolidationOutcome } from './disposition.js';
+import { DECISIONS_CONSOLIDATION_MAX_TOKENS } from '../../constants.js';
 import type { DecisionStore, PendingDecision } from '../../types/index.js';
 import type { LLMService } from '../services/llm-service.js';
 
@@ -29,9 +30,36 @@ function makeLLM(
       usage: { inputTokens: 1, outputTokens, totalTokens: outputTokens + 1 },
     }),
     completeJSON: vi.fn(),
+    getModel: vi.fn().mockReturnValue('test-model'),
     saveLogs: vi.fn().mockResolvedValue(undefined),
   } as unknown as LLMService;
 }
+
+describe('consolidateDrafts — output cap by model', () => {
+  const response = JSON.stringify([{
+    id: 'draft0000',
+    title: 'Decision 0',
+    rationale: 'Some rationale',
+    consequences: 'c',
+    affectedDomains: ['api'],
+    affectedFiles: [],
+    proposedRequirement: null,
+  }]);
+
+  it('sends no explicit max_tokens for Claude 4.7+ models', async () => {
+    const llm = makeLLM(response);
+    vi.mocked(llm.getModel).mockReturnValue('claude-haiku-5-5');
+    await consolidateDrafts(makeStore([{ title: 'Decision 0' }]), llm);
+    expect(vi.mocked(llm.complete).mock.calls[0][0].maxTokens).toBeUndefined();
+  });
+
+  it('keeps the 2k cap for older models', async () => {
+    const llm = makeLLM(response);
+    vi.mocked(llm.getModel).mockReturnValue('claude-sonnet-4-5');
+    await consolidateDrafts(makeStore([{ title: 'Decision 0' }]), llm);
+    expect(vi.mocked(llm.complete).mock.calls[0][0].maxTokens).toBe(DECISIONS_CONSOLIDATION_MAX_TOKENS);
+  });
+});
 
 function protectedData(prompt: string): string {
   return prompt.split('\n').slice(1, -1).join('\n');

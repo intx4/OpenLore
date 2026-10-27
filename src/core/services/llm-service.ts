@@ -497,6 +497,8 @@ export interface LLMProvider {
   countTokens(text: string): number;
   maxContextTokens: number;
   maxOutputTokens: number;
+  /** Model id the provider sends, when it reports one. */
+  modelId?(): string;
 }
 
 export type ProviderName = 'anthropic' | 'openai' | 'openai-compat' | 'copilot' | 'gemini' | 'gemini-cli' | 'antigravity-cli' | 'claude-code' | 'codex-cli' | 'mistral-vibe' | 'cursor-agent';
@@ -836,6 +838,11 @@ function tokenCount(v: unknown): number {
  */
 const CLAUDE_4_7_PLUS_REGEX = /claude-(?:opus-4-[7-9]|(?:opus|sonnet|haiku|fable|mythos)-[5-9])/;
 
+/** True for Claude Opus 4.7 and later (Claude API or platform ids). */
+export function isClaude47PlusModel(model: string): boolean {
+  return CLAUDE_4_7_PLUS_REGEX.test(model);
+}
+
 /**
  * Anthropic Claude provider
  */
@@ -857,12 +864,16 @@ export class AnthropicProvider implements LLMProvider {
     if (!sslVerify) disableSslVerification();
   }
 
+  modelId(): string {
+    return this.model;
+  }
+
   countTokens(text: string): number {
     return estimateTokens(text);
   }
 
   async generateCompletion(request: CompletionRequest, signal?: AbortSignal): Promise<CompletionResponse> {
-    const claude47Plus = CLAUDE_4_7_PLUS_REGEX.test(this.model);
+    const claude47Plus = isClaude47PlusModel(this.model);
     const response = await withRelaxedTls(() => fetch(`${this.baseUrl}/messages`, {
       method: 'POST',
       headers: {
@@ -1969,6 +1980,13 @@ export class LLMService {
    */
   getCostTracking(): CostTracking {
     return { ...this.costTracking };
+  }
+
+  /**
+   * Model id in use: the provider's own id when it has one, else the configured option.
+   */
+  getModel(): string {
+    return this.provider.modelId?.() ?? this.options.model;
   }
 
   /**
