@@ -934,6 +934,23 @@ export async function getFileDiff(
   maxChars: number = DIFF_MAX_CHARS,
 ): Promise<string> {
   validateGitRef(baseRef); // argument-injection guard before interpolating into a git rev range
+  // Index vs merge-base: commits on the branch PLUS staged changes. Without this, a
+  // decision about staged-but-uncommitted code has no evidence and is judged phantom.
+  try {
+    const { stdout: mb } = await execFileAsync('git', ['merge-base', baseRef, 'HEAD'], { cwd: rootPath });
+    const { stdout } = await execFileAsync(
+      'git',
+      ['diff', '--cached', mb.trim(), '--', filePath],
+      { cwd: rootPath },
+    );
+    if (stdout.trim()) {
+      return stdout.length > maxChars
+        ? stdout.slice(0, maxChars) + '\n... (truncated)'
+        : stdout;
+    }
+  } catch (err) {
+    logger.debug(`git diff --cached failed for ${filePath}: ${(err as Error).message}`);
+  }
   // Try three-dot diff first (merge-base), fall back to two-dot
   for (const separator of ['...', '..']) {
     try {
