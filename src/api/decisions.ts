@@ -248,7 +248,7 @@ async function consolidateDecisions(
     progress(onProgress, 'Building git diff', 'start');
     try {
       const baseRef = await resolveBaseRef(rootPath, options.baseRef ?? 'auto');
-      const gitResult = await getChangedFiles({ rootPath, baseRef, includeUnstaged: false });
+      const gitResult = await getChangedFiles({ rootPath, baseRef, includeUnstaged: true });
       const relevant = gitResult.files.slice(0, DECISIONS_EXTRACTION_MAX_FILES);
       const diffs = await Promise.all(
         relevant.map((f) => getFileDiff(rootPath, f.path, baseRef, DECISIONS_DIFF_MAX_CHARS))

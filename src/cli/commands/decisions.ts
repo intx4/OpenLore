@@ -1027,7 +1027,7 @@ the gate auto-accepts verified decisions, syncs them to specs marked "Auto-accep
         // out on cwd-relative pathspecs, misclassifying real decisions as phantom.
         if (await isGitRepositoryRoot(rootPath)) {
           const baseRef = await resolveBaseRef(rootPath, 'auto');
-          const gitResult = await getChangedFiles({ rootPath, baseRef, includeUnstaged: false });
+          const gitResult = await getChangedFiles({ rootPath, baseRef, includeUnstaged: true });
           const relevant = gitResult.files.slice(0, DECISIONS_EXTRACTION_MAX_FILES);
           const diffs = await Promise.all(
             relevant.map((f) => getFileDiff(rootPath, f.path, baseRef, DECISIONS_DIFF_MAX_CHARS))
